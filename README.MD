@@ -54,24 +54,24 @@ Or build it yourself from source!
  - add `local.properties` file to the project root and set a path to Android SDK there
 
 ### Android
-To run the application on android device/emulator:  
+To run the application on android device/emulator:
  - open project in Android Studio and run imported android run configuration
 
 To build the application bundle:
- - run `./gradlew :composeApp:assembleDebug`
- - find `.apk` file in `composeApp/build/outputs/apk/debug/composeApp-debug.apk`
+ - run `./gradlew :androidApp:assembleDebug`
+ - find `.apk` file in `androidApp/build/outputs/apk/debug/androidApp-debug.apk`
 
 ### Desktop
-Run the desktop application: `./gradlew :composeApp:run`  
-Run the desktop **hot reload** application: `./gradlew :composeApp:jvmRunHot`
+Run the desktop application: `./gradlew :desktopApp:run`  
+Run the desktop **hot reload** application: `./gradlew :desktopApp:hotRun --auto`
 
 ### iOS
 To run the application on iPhone device/simulator:
  - Open `iosApp/iosApp.xcproject` in Xcode and run standard configuration
  - Or use [Kotlin Multiplatform Mobile plugin](https://plugins.jetbrains.com/plugin/14936-kotlin-multiplatform-mobile) for Android Studio
 
-### Wasm Browser (Alpha)
-Run the browser application: `./gradlew :composeApp:wasmJsBrowserDevelopmentRun --continue`
+### Wasm Browser
+Run the browser application: `./gradlew :webApp:wasmJsBrowserDevelopmentRun`
 
 ## 🧑‍💻 Idea
 Inspiration and idea were seen in the web-application [wikitok](https://wikitok.vercel.app/)

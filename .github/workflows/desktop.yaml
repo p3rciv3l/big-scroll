@@ -26,8 +26,8 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: 'jetbrains'
+          java-version: '25'
 
       - uses: gradle/actions/setup-gradle@v4
         with:
@@ -41,14 +41,14 @@ jobs:
           key: ${{ runner.os }}-v1-${{ hashFiles('*.versions.toml') }}
 
       - name: Build
-        run: ./gradlew packageReleaseDistributionForCurrentOS
+        run: ./gradlew :desktopApp:packageReleaseDistributionForCurrentOS
 
       - name: Move
-        run: mv ./composeApp/build/compose/binaries/main-release/${{ matrix.artifact_ext }}/*.${{ matrix.artifact_ext }} ./composeApp/build/compose/binaries/main-release/WikWok.${{ matrix.artifact_ext }}
+        run: mv ./desktopApp/build/compose/binaries/main-release/${{ matrix.artifact_ext }}/*.${{ matrix.artifact_ext }} ./composeApp/build/compose/binaries/main-release/WikWok.${{ matrix.artifact_ext }}
 
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ./composeApp/build/compose/binaries/main-release/WikWok.${{ matrix.artifact_ext }}
+          file: ./desktopApp/build/compose/binaries/main-release/WikWok.${{ matrix.artifact_ext }}
           tag: ${{ github.ref }}
