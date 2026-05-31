@@ -21,13 +21,10 @@ actual fun clipEntryOf(text: String): ClipEntry = ClipEntry.withPlainText(text)
 
 @Composable
 internal actual fun BrowserNavigation(backStack: NavBackStack<NavKey>) {
-    HierarchicalBrowserNavigation(
-        currentDestination = remember { derivedStateOf { backStack.lastOrNull() } },
-        currentDestinationName = { key ->
-            when (key) {
-                is LikedArticlesDestination -> buildBrowserHistoryFragment("liked_articles")
-                else -> null
-            }
-        },
-    )
+    HierarchicalBrowserNavigation {
+        when (backStack.lastOrNull()) {
+            is LikedArticlesDestination -> buildBrowserHistoryFragment("liked_articles")
+            else -> null
+        }
+    }
 }
