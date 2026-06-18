@@ -21,7 +21,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "WikWok"
-            packageVersion = "1.0.4"
+            packageVersion = "1.0.5"
 
             linux {
                 iconFile.set(project.file("appIcons/LinuxIcon.png"))

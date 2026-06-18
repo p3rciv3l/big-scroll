@@ -14,8 +14,8 @@ android {
         targetSdk = 37
 
         applicationId = "com.github.terrakok.wikwok.androidApp"
-        versionCode = 5
-        versionName = "1.0.4"
+        versionCode = 6
+        versionName = "1.0.5"
     }
 
     signingConfigs {
