@@ -8,7 +8,7 @@ export default defineConfig({
   retries: 1,
   reporter: "line",
   webServer: {
-    command: "python3 -m http.server 4173 --directory site",
+    command: "node web-tests/static-server.mjs site 4173",
     port: 4173,
     reuseExistingServer: true,
   },

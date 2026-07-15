@@ -47,9 +47,9 @@ jobs:
           CURRENT_DIST: site
           UPSTREAM_DIST: ${{ runner.temp }}/wikwok-upstream/webApp/build/dist/wasmJs/productionExecutable
         run: |
-          python3 -m http.server 4173 --directory site >/tmp/big-scroll-current.log 2>&1 &
+          node web-tests/static-server.mjs site 4173 >/tmp/big-scroll-current.log 2>&1 &
           CURRENT_SERVER=$!
-          python3 -m http.server 4174 --directory "$UPSTREAM_DIST" >/tmp/big-scroll-upstream.log 2>&1 &
+          node web-tests/static-server.mjs "$UPSTREAM_DIST" 4174 >/tmp/big-scroll-upstream.log 2>&1 &
           UPSTREAM_SERVER=$!
           trap 'kill "$CURRENT_SERVER" "$UPSTREAM_SERVER"' EXIT
           npm run test:baseline

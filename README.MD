@@ -19,7 +19,7 @@ Actions tests the recommendation model and deploys `site/` to free GitHub Pages 
 Run locally with:
 
 ```sh
-python3 -m http.server 4173 --directory site
+node web-tests/static-server.mjs site 4173
 node --test web-tests/*.test.mjs
 npm ci
 npm run test:browser
