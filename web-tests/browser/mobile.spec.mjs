@@ -121,3 +121,25 @@ test("startup renders one small batch without pre-filling", async ({ page }) => 
   expect(request.searchParams.get("grnlimit")).toBe("10");
   expect(request.searchParams.get("prop")).toBe("extracts|info|pageimages");
 });
+
+test("pagination waits for active scrolling to settle", async ({ page }) => {
+  const wikipedia = await mockWikipedia(page, { latency: 0 });
+
+  await page.goto("/");
+  await expect(page.locator(".article")).toHaveCount(10);
+  await page.locator("#feed").evaluate(async (feed) => {
+    const started = performance.now();
+    await new Promise((resolve) => {
+      function frame(now) {
+        const progress = Math.min(1, (now - started) / 500);
+        feed.scrollTop = (feed.scrollHeight - feed.clientHeight) * progress;
+        if (progress < 1) requestAnimationFrame(frame);
+        else resolve();
+      }
+      requestAnimationFrame(frame);
+    });
+  });
+
+  expect(wikipedia.calls).toBe(1);
+  await expect.poll(() => wikipedia.calls).toBeGreaterThan(1);
+});
