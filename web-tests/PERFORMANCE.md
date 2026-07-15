@@ -30,5 +30,6 @@ more than 200 articles, checks the 48-card DOM and five-image bounds, records fr
 verifies likes across reload, and asserts the absence of logo, About, and language controls.
 `browser/cache.spec.mjs` separately allows the service worker, verifies its populated shell
 cache remains readable while offline. CI builds untouched upstream `552a5c1`, runs this comparison,
-and fails if Big Scroll exceeds upstream by more than 3 ms at p95, one frame over 50 ms, or
-10 ms at the maximum.
+on a macOS-hosted WebKit runner, and fails if Big Scroll exceeds upstream by more than 3 ms
+at p95, one frame over 50 ms, or 10 ms at the maximum. The macOS runner is intentional:
+Linux WebKit's headless native scroll-snap compositor is not the renderer used by iPhone Safari.
