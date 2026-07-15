@@ -145,8 +145,6 @@ button { font: inherit; }
   background: rgba(28, 28, 32, .72);
   box-shadow: 0 4px 24px rgba(0, 0, 0, .28);
   color: #fff;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
 }
 
 .heart-button {
