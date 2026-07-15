@@ -5,12 +5,14 @@ On 2026-07-15, `compare-upstream.mjs` measured Big Scroll and untouched upstream
 iPhone 13 user agent, 150 ms mocked Wikipedia latency, and a repeating 3 ms main-thread task
 every 16 ms. Desktop input mode was used only for this comparison so WebKit could deliver
 the same twelve wheel gestures to the native scroller and the upstream Compose canvas.
-Screenshots/scroll offsets verified that both surfaces changed during the sample.
+Screenshots/scroll offsets verified that both surfaces changed during the sample. Both are
+warmed first, then run in alternating order for three measured trials; the table reports the
+median trial so a one-off shared-runner scheduling stall cannot decide the deployment.
 
 | Build | p95 frame gap | Frames over 50 ms | Maximum gap | Deployable size |
 | --- | ---: | ---: | ---: | ---: |
 | Big Scroll | 20 ms | 0 | 21 ms | 25,155 bytes |
-| Upstream WikWok | 19 ms | 0 | 21 ms | 15,719,738 bytes |
+| Upstream WikWok | 19 ms | 0 | 24 ms | 15,719,738 bytes |
 
 Big Scroll therefore did not regress measured steady-state scroll latency in this constrained,
 same-machine comparison. Reproduce it after building upstream with:

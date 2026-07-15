@@ -26,6 +26,23 @@ function summarize(gaps) {
   };
 }
 
+function median(values) {
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+function aggregate(name, trials) {
+  return {
+    name,
+    changed: trials.every((trial) => trial.changed),
+    frames: median(trials.map((trial) => trial.frames)),
+    p95: median(trials.map((trial) => trial.p95)),
+    over50: median(trials.map((trial) => trial.over50)),
+    max: median(trials.map((trial) => trial.max)),
+    trials,
+  };
+}
+
 const surfaces = {
   current: {
     name: "Big Scroll",
@@ -90,8 +107,23 @@ async function measure(browser, surface, url) {
 
 const browser = await webkit.launch();
 try {
-  const current = await measure(browser, surfaces.current, currentUrl);
-  const upstream = await measure(browser, surfaces.upstream, upstreamUrl);
+  await measure(browser, surfaces.current, currentUrl);
+  await measure(browser, surfaces.upstream, upstreamUrl);
+
+  const currentTrials = [];
+  const upstreamTrials = [];
+  for (let round = 0; round < 3; round += 1) {
+    if (round % 2 === 0) {
+      currentTrials.push(await measure(browser, surfaces.current, currentUrl));
+      upstreamTrials.push(await measure(browser, surfaces.upstream, upstreamUrl));
+    } else {
+      upstreamTrials.push(await measure(browser, surfaces.upstream, upstreamUrl));
+      currentTrials.push(await measure(browser, surfaces.current, currentUrl));
+    }
+  }
+
+  const current = aggregate(surfaces.current.name, currentTrials);
+  const upstream = aggregate(surfaces.upstream.name, upstreamTrials);
   const result = {
     current,
     upstream,
