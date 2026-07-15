@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#050505" />
+    <meta name="description" content="A personalized, swipeable Wikipedia reader." />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://en.wikipedia.org; img-src 'self' data: https://upload.wikimedia.org https://*.wikimedia.org; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <title>Big Scroll</title>
+    <link rel="preconnect" href="https://en.wikipedia.org" />
+    <link rel="preconnect" href="https://upload.wikimedia.org" crossorigin />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="feed" aria-label="Wikipedia article feed"></main>
+
+    <button id="open-likes" class="likes-nav" type="button" aria-label="Open liked articles">
+      <span aria-hidden="true">♥</span>
+      <span>Likes</span>
+      <span id="likes-count" class="likes-count">0</span>
+    </button>
+
+    <section id="likes-panel" class="likes-panel" role="dialog" aria-modal="true" aria-labelledby="likes-title" aria-hidden="true" inert>
+      <header class="likes-header">
+        <div>
+          <p class="eyebrow">Saved on this device</p>
+          <h1 id="likes-title">Likes</h1>
+        </div>
+        <button id="close-likes" class="icon-button" type="button" aria-label="Close liked articles">×</button>
+      </header>
+      <div id="liked-articles" class="liked-articles"></div>
+    </section>
+
+    <div id="status" class="status" role="status" aria-live="polite">Finding articles…</div>
+    <noscript>Big Scroll needs JavaScript to load Wikipedia articles.</noscript>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

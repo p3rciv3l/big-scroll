@@ -1,10 +1,34 @@
-# WikWok
+# Big Scroll
+
+Big Scroll is a lightweight, iPhone-first Wikipedia feed built from
+[terrakok/WikWok](https://github.com/terrakok/WikWok). The deployed web surface lives in
+`site/`: it has no logo, About menu, or language menu, and retains only the per-article
+like action and device-local Likes collection.
+
+The personalized order is derived entirely from the articles saved in
+`big-scroll.likes.v1` in the browser's `localStorage`. It uses established methods:
+
+- Rocchio positive relevance feedback (J. J. Rocchio, *The SMART Retrieval System*, 1971)
+- signed feature hashing ([Weinberger et al., ICML 2009](https://doi.org/10.1145/1553374.1553516))
+- epsilon-greedy exploration (Sutton and Barto, *Reinforcement Learning*, 2nd ed., section 2.2)
+
+There is no server-side profile, account, database, analytics SDK, or paid hosting. GitHub
+Actions tests the recommendation model and deploys `site/` to free GitHub Pages hosting.
+
+Run locally with:
+
+```sh
+python3 -m http.server 4173 --directory site
+node --test web-tests/*.test.mjs
+```
+
+## Upstream WikWok
 
 https://github.com/user-attachments/assets/a131ab28-fc53-4e3b-81d8-8e1276ae5b36
 
 > Wikipedia meets TikTok: Knowledge that keeps you scrolling
 
-## 📱 About WikWok
+### 📱 About WikWok
 
 WikWok is a beautiful and functional app that transforms your Wikipedia reading experience into an engaging, TikTok-style article feed. Learn something new with every scroll!
 
