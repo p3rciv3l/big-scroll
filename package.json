@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "test": "node --test web-tests/*.test.mjs",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:baseline": "node web-tests/compare-upstream.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1"

@@ -1,16 +1,14 @@
 export const RECOMMENDER_DIMENSIONS = 256;
 const DIMENSIONS = RECOMMENDER_DIMENSIONS;
 const EPSILON = 0.1;
-const STOP_WORDS = new Set(
-  "a an and are as at be been by for from has have he her his in into is it its of on or that the their this to was were which who will with".split(" "),
-);
-
 // This is the published positive-only Rocchio equation (q0 = 0, gamma = 0),
 // scored with cosine similarity. Features use signed feature hashing, while
 // result selection uses the standard fixed-epsilon greedy policy (epsilon=.1):
 // - https://nlp.stanford.edu/IR-book/html/htmledition/the-rocchio71-algorithm-1.html
 // - https://icml.cc/Conferences/2009/papers/407.pdf
 // - http://incompleteideas.net/book/the-book-2nd.html (section 2.2)
+// - https://www.ietf.org/archive/id/draft-eastlake-fnv-25.html (FNV-1a)
+// The 256 dimensions are an implementation memory bound, not a new ranking method.
 
 function hashToken(token) {
   let hash = 2166136261;
@@ -24,11 +22,10 @@ function hashToken(token) {
 export function articleVector(article) {
   const vector = new Float32Array(DIMENSIONS);
   const categories = (article.categories || []).map((category) => category.title || category).join(" ");
-  const text = `${article.title || ""} ${article.title || ""} ${categories} ${article.extract || ""}`.toLowerCase();
+  const text = `${article.title || ""} ${categories} ${article.extract || ""}`.toLowerCase();
   const tokens = text.match(/[\p{L}\p{N}]{3,}/gu) || [];
 
   for (const token of tokens) {
-    if (STOP_WORDS.has(token)) continue;
     const hash = hashToken(token);
     const bucket = hash % DIMENSIONS;
     const sign = (hash & 256) === 0 ? 1 : -1;

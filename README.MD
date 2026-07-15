@@ -10,6 +10,7 @@ The personalized order is derived entirely from the articles saved in
 
 - the published positive-only [Rocchio relevance-feedback equation](https://nlp.stanford.edu/IR-book/html/htmledition/the-rocchio71-algorithm-1.html)
 - signed feature hashing from [Weinberger et al., ICML 2009](https://icml.cc/Conferences/2009/papers/407.pdf)
+- the published [FNV-1a hash](https://www.ietf.org/archive/id/draft-eastlake-fnv-25.html) for fixed-size feature placement
 - the fixed `epsilon = 0.1` greedy policy from [Sutton and Barto, section 2.2](http://incompleteideas.net/book/the-book-2nd.html)
 
 There is no server-side profile, account, database, analytics SDK, or paid hosting. GitHub
@@ -22,11 +23,14 @@ python3 -m http.server 4173 --directory site
 node --test web-tests/*.test.mjs
 npm ci
 npm run test:browser
+npm run test:baseline
 ```
 
-The WebKit suite runs at an iPhone viewport and covers likes persistence, the likes-only
-UI, constrained scrolling, and the bounded feed. The same-machine comparison and exact
-results are recorded in [`web-tests/PERFORMANCE.md`](web-tests/PERFORMANCE.md).
+The WebKit suite uses Playwright's iPhone 13 emulation (not a physical phone) and covers
+likes persistence, the likes-only UI, constrained scrolling, the bounded feed, and shell
+cache availability while offline. CI also rebuilds untouched upstream WikWok and rejects a
+scroll-latency regression beyond the documented tolerance. Exact results are recorded in
+[`web-tests/PERFORMANCE.md`](web-tests/PERFORMANCE.md).
 
 ## Upstream WikWok
 

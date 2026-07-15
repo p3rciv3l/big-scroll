@@ -19,9 +19,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
       - name: Install browser test tooling
         run: npm ci
       - name: Install WebKit
@@ -30,6 +36,23 @@ jobs:
         run: npm test
       - name: Test constrained iPhone scrolling
         run: npm run test:browser
+      - name: Build untouched upstream baseline
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/wikwok-upstream" 552a5c1
+          "$RUNNER_TEMP/wikwok-upstream/gradlew" \
+            -p "$RUNNER_TEMP/wikwok-upstream" \
+            :webApp:wasmJsBrowserDistribution --no-daemon
+      - name: Enforce no-regression scroll baseline
+        env:
+          CURRENT_DIST: site
+          UPSTREAM_DIST: ${{ runner.temp }}/wikwok-upstream/webApp/build/dist/wasmJs/productionExecutable
+        run: |
+          python3 -m http.server 4173 --directory site >/tmp/big-scroll-current.log 2>&1 &
+          CURRENT_SERVER=$!
+          python3 -m http.server 4174 --directory "$UPSTREAM_DIST" >/tmp/big-scroll-upstream.log 2>&1 &
+          UPSTREAM_SERVER=$!
+          trap 'kill "$CURRENT_SERVER" "$UPSTREAM_SERVER"' EXIT
+          npm run test:baseline
 
   deploy:
     needs: test

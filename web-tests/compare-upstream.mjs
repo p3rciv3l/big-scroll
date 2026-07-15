@@ -102,6 +102,14 @@ try {
   };
   console.log(JSON.stringify(result, null, 2));
   if (!current.changed || !upstream.changed) process.exitCode = 2;
+  const regressed =
+    current.p95 > upstream.p95 + 3 ||
+    current.over50 > upstream.over50 + 1 ||
+    current.max > upstream.max + 10;
+  if (regressed) {
+    console.error("Big Scroll exceeded the upstream scroll-latency tolerance.");
+    process.exitCode = 3;
+  }
 } finally {
   await browser.close();
 }
