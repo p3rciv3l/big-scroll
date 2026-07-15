@@ -22,8 +22,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Test recommendation model
-        run: node --test web-tests/*.test.mjs
+      - name: Install browser test tooling
+        run: npm ci
+      - name: Install WebKit
+        run: npx playwright install --with-deps webkit
+      - name: Test recommendation and persistence models
+        run: npm test
+      - name: Test constrained iPhone scrolling
+        run: npm run test:browser
 
   deploy:
     needs: test

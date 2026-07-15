@@ -224,6 +224,13 @@ function schedulePrune() {
   pruneTimer = setTimeout(pruneFeed, 220);
 }
 
+function ensureFeedBuffer() {
+  if (!activeArticleId || loading) return;
+  const cards = [...feed.children];
+  const activeIndex = cards.findIndex((card) => card.dataset.pageid === activeArticleId);
+  if (activeIndex >= 0 && cards.length - activeIndex - 1 <= 5) void loadMore();
+}
+
 const observer = new IntersectionObserver((entries) => {
   const active = entries
     .filter((entry) => entry.isIntersecting)
@@ -232,8 +239,7 @@ const observer = new IntersectionObserver((entries) => {
   activeArticleId = active.target.dataset.pageid;
   hydrateNearbyImages();
   schedulePrune();
-  const remaining = feed.children.length - [...feed.children].indexOf(active.target) - 1;
-  if (remaining <= 5) void loadMore();
+  ensureFeedBuffer();
 }, { root: feed, threshold: [0.55, 0.85] });
 
 async function loadMore(attempt = 0) {
@@ -264,6 +270,9 @@ async function loadMore(attempt = 0) {
     setTimeout(() => void loadMore(attempt + 1), delay);
   } finally {
     loading = false;
+    // A very fast swipe can reach the end while the preceding request is still
+    // completing. Recheck after releasing the lock so that gesture cannot stall.
+    setTimeout(ensureFeedBuffer, 0);
   }
 }
 

@@ -15,3 +15,7 @@ Pods/
 *.jks
 *.gpg
 *yarn.lock
+# Local JavaScript browser-test artifacts
+node_modules/
+test-results/
+playwright-report/

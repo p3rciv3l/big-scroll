@@ -1,14 +1,16 @@
 export const RECOMMENDER_DIMENSIONS = 256;
 const DIMENSIONS = RECOMMENDER_DIMENSIONS;
+const EPSILON = 0.1;
 const STOP_WORDS = new Set(
   "a an and are as at be been by for from has have he her his in into is it its of on or that the their this to was were which who will with".split(" "),
 );
 
-// This model composes established techniques rather than defining a new recommender:
-// - Rocchio positive-centroid relevance feedback: J. J. Rocchio,
-//   The SMART Retrieval System (1971).
-// - Feature hashing: Weinberger et al., ICML 2009, https://doi.org/10.1145/1553374.1553516
-// - Epsilon-greedy exploration: Sutton & Barto, Reinforcement Learning (2nd ed.), section 2.2.
+// This is the published positive-only Rocchio equation (q0 = 0, gamma = 0),
+// scored with cosine similarity. Features use signed feature hashing, while
+// result selection uses the standard fixed-epsilon greedy policy (epsilon=.1):
+// - https://nlp.stanford.edu/IR-book/html/htmledition/the-rocchio71-algorithm-1.html
+// - https://icml.cc/Conferences/2009/papers/407.pdf
+// - http://incompleteideas.net/book/the-book-2nd.html (section 2.2)
 
 function hashToken(token) {
   let hash = 2166136261;
@@ -99,11 +101,10 @@ export class RocchioRecommender {
       }
       return shuffled;
     }
-    const epsilon = Math.max(0.05, 0.22 * Math.exp(-this.feedbackCount / 18));
     const remaining = articles.map((article) => ({ article, score: this.score(article) }));
     const ranked = [];
     while (remaining.length > 0) {
-      const index = random() < epsilon
+      const index = random() < EPSILON
         ? Math.floor(random() * remaining.length)
         : remaining.reduce(
           (best, candidate, candidateIndex, all) => candidate.score > all[best].score ? candidateIndex : best,
