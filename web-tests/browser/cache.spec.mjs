@@ -7,7 +7,7 @@ test("service worker cache remains readable offline", async ({ context, page }) 
 
   const cached = await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
-    const assets = ["./", "./styles.css?v=10", "./app.js?v=10", "./engagement-store.mjs", "./recommender.mjs"];
+    const assets = ["./", "./styles.css?v=11", "./app.js?v=11", "./engagement-store.mjs", "./recommender.mjs"];
     return Promise.all(
       assets.map(async (asset) => Boolean(await caches.match(new URL(asset, location.href)))),
     );
@@ -19,7 +19,7 @@ test("service worker cache remains readable offline", async ({ context, page }) 
 
   await context.setOffline(true);
   const offlineResponses = await page.evaluate(async () => {
-    const assets = ["./", "./styles.css?v=10", "./app.js?v=10", "./engagement-store.mjs", "./recommender.mjs"];
+    const assets = ["./", "./styles.css?v=11", "./app.js?v=11", "./engagement-store.mjs", "./recommender.mjs"];
     return Promise.all(assets.map(async (asset) => {
       const response = await caches.match(new URL(asset, location.href));
       return { ok: response.ok, bytes: (await response.text()).length };

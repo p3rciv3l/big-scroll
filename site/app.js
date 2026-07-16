@@ -4,6 +4,7 @@ import { loadLikes, saveLikes } from "./likes-store.mjs";
 
 const API_ENDPOINT = "https://en.wikipedia.org/w/api.php";
 const BATCH_SIZE = 10;
+const PAGINATION_FETCH_SIZE = 30;
 const PAGINATION_SETTLE_MS = 200;
 const FEEDBACK_SETTLE_MS = 500;
 const HEART_OUTLINE_PATH = "M480 840 422 788Q321 697 255 631T150 512.5Q111 460 95.5 416T80 326Q80 232 143 169T300 106Q352 106 399 128T480 190Q514 150 561 128T660 106Q754 106 817 169T880 326Q880 372 864.5 416T810 512.5Q771 565 705 631T538 788L480 840ZM480 732Q576 646 638 584.5T736 477.5Q772 432 786 396.5T800 326Q800 266 760 226T660 186Q613 186 573 212.5T518 280H442Q427 239 387 212.5T300 186Q240 186 200 226T160 326Q160 361 174 396.5T224 477.5Q260 523 322 584.5T480 732Z";
@@ -16,6 +17,7 @@ const likesPanel = document.querySelector("#likes-panel");
 const likedArticles = document.querySelector("#liked-articles");
 const likesCount = document.querySelector("#likes-count");
 const seen = new Set();
+const candidateBuffer = [];
 let likes = loadLikes();
 const engagementStore = new EngagementStore();
 const recommender = new MultiFeedbackBprRecommender({
@@ -28,6 +30,7 @@ let loadTrigger = null;
 let loadTimer = 0;
 let feedbackTimer = 0;
 let feedbackDirty = false;
+let candidateRequest = null;
 let viewFrame = 0;
 let activeView = null;
 const articleElements = new WeakMap();
@@ -141,13 +144,13 @@ function normalizeArticle(page) {
   };
 }
 
-async function fetchCandidates() {
+async function fetchCandidates(limit = BATCH_SIZE) {
   requestSequence += 1;
   const params = new URLSearchParams({
     action: "query",
     generator: "random",
     grnnamespace: "0",
-    grnlimit: String(BATCH_SIZE),
+    grnlimit: String(limit),
     prop: "extracts|info|pageimages",
     exintro: "1",
     exlimit: "max",
@@ -171,6 +174,22 @@ async function fetchCandidates() {
       && article.extract.length > 15
       && !seen.has(String(article.pageid))
     ));
+}
+
+async function refillCandidates(limit) {
+  if (candidateRequest) return candidateRequest;
+  candidateRequest = fetchCandidates(limit)
+    .then((candidates) => {
+      for (const article of candidates) {
+        const key = String(article.pageid);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        candidateBuffer.push(article);
+      }
+      return candidates.length;
+    })
+    .finally(() => { candidateRequest = null; });
+  return candidateRequest;
 }
 
 function createHeartButton(article) {
@@ -296,7 +315,7 @@ function scheduleLoadMore() {
 
 const observer = new IntersectionObserver((entries) => {
   if (entries.some((entry) => entry.isIntersecting)) scheduleLoadMore();
-}, { root: feed, rootMargin: "100% 0px" });
+}, { root: feed, rootMargin: "700% 0px" });
 
 feed.addEventListener("scroll", () => {
   scheduleActiveView();
@@ -308,12 +327,15 @@ async function loadMore(attempt = 0) {
   loading = true;
   if (feed.children.length === 0) setStatus("Finding articles…");
   try {
-    const candidates = await fetchCandidates();
+    const initialLoad = feed.children.length === 0;
+    if (candidateBuffer.length === 0) {
+      await refillCandidates(initialLoad ? BATCH_SIZE : PAGINATION_FETCH_SIZE);
+    }
+    const candidates = candidateBuffer.splice(0, BATCH_SIZE);
     flushFeedback();
     const ranked = recommender.rerank(candidates);
     const fragment = document.createDocumentFragment();
     for (const article of ranked) {
-      seen.add(String(article.pageid));
       const element = createArticle(article);
       fragment.append(element);
     }
@@ -323,7 +345,11 @@ async function loadMore(attempt = 0) {
     loadTrigger = feed.lastElementChild;
     if (loadTrigger) observer.observe(loadTrigger);
     setStatus("", false);
-    if (ranked.length === 0) setTimeout(() => void loadMore(), 250);
+    if (ranked.length === 0) {
+      setTimeout(() => void loadMore(), 100);
+    } else if (!initialLoad && candidateBuffer.length < BATCH_SIZE) {
+      void refillCandidates(PAGINATION_FETCH_SIZE).catch(() => {});
+    }
   } catch (error) {
     const delay = Math.min(8000, 500 * (2 ** attempt));
     setStatus("Wikipedia is taking a moment…");

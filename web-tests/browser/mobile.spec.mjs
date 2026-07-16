@@ -156,16 +156,17 @@ test("long constrained session keeps images present and frame gaps bounded", asy
   const firstPageId = Number(await page.locator(".article").first().getAttribute("data-pageid"));
 
   for (let batch = 0; batch < 6; batch += 1) {
-    const previousCalls = wikipedia.calls;
+    const previousCount = await page.locator(".article").count();
     await page.locator("#feed").evaluate((feed) => {
       feed.scrollTo({ top: feed.scrollHeight - feed.clientHeight, behavior: "instant" });
     });
-    await expect.poll(() => wikipedia.calls).toBeGreaterThan(previousCalls);
+    await expect.poll(() => page.locator(".article").count()).toBeGreaterThan(previousCount);
     await page.waitForTimeout(350);
   }
 
   await page.waitForTimeout(500);
-  expect(wikipedia.calls).toBeGreaterThanOrEqual(7);
+  expect(wikipedia.calls).toBeGreaterThanOrEqual(3);
+  expect(wikipedia.calls).toBeLessThanOrEqual(4);
   const articleCount = await page.locator(".article").count();
   expect(articleCount).toBeGreaterThanOrEqual(70);
   await expect(page.locator(".article-image[src]")).toHaveCount(articleCount);
@@ -241,4 +242,32 @@ test("pagination waits for active scrolling to settle", async ({ page }) => {
 
   expect(wikipedia.calls).toBe(1);
   await expect.poll(() => wikipedia.calls).toBeGreaterThan(1);
+});
+
+test("thumbnail-sparse pagination does not stall the next card", async ({ page }) => {
+  const image = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='390' height='844'%3E%3Crect width='390' height='844' fill='%23263548'/%3E%3C/svg%3E";
+  await mockWikipedia(page, {
+    latency: 400,
+    imageSource: ({ pageid, index }) => {
+      const call = Math.floor(pageid / 100);
+      return call === 1 || index === 24 ? image : null;
+    },
+  });
+  await page.goto("/");
+  await expect(page.locator(".article")).toHaveCount(10);
+
+  const started = Date.now();
+  await page.locator("#feed").evaluate((feed) => {
+    feed.scrollTo({ top: feed.scrollHeight - feed.clientHeight, behavior: "instant" });
+  });
+  await expect.poll(() => page.locator(".article").count(), { timeout: 4_000 }).toBeGreaterThan(10);
+
+  expect(Date.now() - started).toBeLessThan(1_200);
+
+  const secondStarted = Date.now();
+  await page.locator("#feed").evaluate((feed) => {
+    feed.scrollTo({ top: feed.scrollHeight - feed.clientHeight, behavior: "instant" });
+  });
+  await expect.poll(() => page.locator(".article").count(), { timeout: 4_000 }).toBeGreaterThan(11);
+  expect(Date.now() - secondStarted).toBeLessThan(1_200);
 });
