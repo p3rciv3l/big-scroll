@@ -28,6 +28,7 @@ let loading = false;
 let requestSequence = 0;
 let loadTrigger = null;
 let loadTimer = 0;
+let lastScrollAt = 0;
 let feedbackTimer = 0;
 let feedbackDirty = false;
 let candidateRequest = null;
@@ -313,11 +314,20 @@ function scheduleLoadMore() {
   }, PAGINATION_SETTLE_MS);
 }
 
+async function waitForScrollSettle() {
+  while (lastScrollAt) {
+    const remaining = PAGINATION_SETTLE_MS - (performance.now() - lastScrollAt);
+    if (remaining <= 0) return;
+    await new Promise((resolve) => setTimeout(resolve, remaining));
+  }
+}
+
 const observer = new IntersectionObserver((entries) => {
   if (entries.some((entry) => entry.isIntersecting)) scheduleLoadMore();
 }, { root: feed, rootMargin: "700% 0px" });
 
 feed.addEventListener("scroll", () => {
+  lastScrollAt = performance.now();
   scheduleActiveView();
   if (loadTimer) scheduleLoadMore();
 }, { passive: true });
@@ -331,6 +341,7 @@ async function loadMore(attempt = 0) {
     if (candidateBuffer.length === 0) {
       await refillCandidates(initialLoad ? BATCH_SIZE : PAGINATION_FETCH_SIZE);
     }
+    if (!initialLoad) await waitForScrollSettle();
     const candidates = candidateBuffer.splice(0, BATCH_SIZE);
     flushFeedback();
     const ranked = recommender.rerank(candidates);

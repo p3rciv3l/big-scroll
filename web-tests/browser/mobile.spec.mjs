@@ -240,8 +240,9 @@ test("pagination waits for active scrolling to settle", async ({ page }) => {
     });
   });
 
-  expect(wikipedia.calls).toBe(1);
-  await expect.poll(() => wikipedia.calls).toBeGreaterThan(1);
+  await expect(page.locator(".article")).toHaveCount(10);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThan(10);
+  expect(wikipedia.calls).toBeGreaterThan(1);
 });
 
 test("thumbnail-sparse pagination does not stall the next card", async ({ page }) => {
