@@ -262,17 +262,17 @@ test("feed excludes articles without usable images", async ({ page }) => {
   const cards = page.locator(".article");
   await expect(cards.locator(".article-image")).toHaveCount(await cards.count());
   await expect(cards.locator(".no-image")).toHaveCount(0);
-  expect(wikipedia.calls).toBe(1);
+  expect(wikipedia.calls).toBe(2);
 });
 
-test("startup renders one small batch without pre-filling", async ({ page }) => {
+test("startup renders one small batch before background prefetch", async ({ page }) => {
   const wikipedia = await mockWikipedia(page, { latency: 0 });
 
   await page.goto("/");
   await expect(page.locator(".article")).toHaveCount(10);
   await page.waitForTimeout(100);
 
-  expect(wikipedia.calls).toBe(1);
+  expect(wikipedia.calls).toBe(2);
   const request = new URL(wikipedia.urls[0]);
   expect(request.searchParams.get("grnlimit")).toBe("10");
   expect(request.searchParams.get("prop")).toBe("extracts|info|pageimages");
@@ -319,10 +319,14 @@ test("pagination mounts without a long frame gap", async ({ page }) => {
     requestAnimationFrame(frame);
   });
   for (let index = 0; index < 12; index += 1) {
-    await page.locator("#feed").evaluate((feed) => { feed.scrollTop += 620; });
+    await page.locator("#feed").evaluate((feed) => {
+      feed.dispatchEvent(new WheelEvent("wheel"));
+      feed.scrollTop += 620;
+    });
     await page.waitForTimeout(85);
   }
   await page.waitForTimeout(300);
+  await expect(page.locator(".article")).toHaveCount(10);
   const maxGap = await page.evaluate(() => {
     window.__samplePagination = false;
     return Math.max(...window.__paginationGaps.slice(1));
@@ -330,6 +334,7 @@ test("pagination mounts without a long frame gap", async ({ page }) => {
 
   console.log(`pagination max frame gap: ${Math.round(maxGap)}ms`);
   expect(maxGap).toBeLessThan(50);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThan(10);
 });
 
 test("thumbnail-sparse pagination does not stall the next card", async ({ page }) => {

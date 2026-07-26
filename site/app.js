@@ -5,7 +5,7 @@ import { REACTION_DEFINITIONS } from "./feedback-registry.mjs?v=12";
 const API_ENDPOINT = "https://en.wikipedia.org/w/api.php";
 const BATCH_SIZE = 10;
 const PAGINATION_FETCH_SIZE = 30;
-const PAGINATION_SETTLE_MS = 200;
+const PAGINATION_SETTLE_MS = 400;
 const FEEDBACK_SETTLE_MS = 500;
 const feed = document.querySelector("#feed");
 const status = document.querySelector("#status");
@@ -346,11 +346,17 @@ const observer = new IntersectionObserver((entries) => {
   if (entries.some((entry) => entry.isIntersecting)) scheduleLoadMore();
 }, { root: feed, rootMargin: "700% 0px" });
 
-feed.addEventListener("scroll", () => {
+function markScrollActivity() {
   lastScrollAt = performance.now();
-  scheduleActiveView();
   if (loadTimer) scheduleLoadMore();
+}
+
+feed.addEventListener("scroll", () => {
+  markScrollActivity();
+  scheduleActiveView();
 }, { passive: true });
+feed.addEventListener("wheel", markScrollActivity, { passive: true });
+feed.addEventListener("touchmove", markScrollActivity, { passive: true });
 
 async function loadMore(attempt = 0) {
   if (loading) return;
@@ -372,7 +378,7 @@ async function loadMore(attempt = 0) {
     setStatus("", false);
     if (ranked.length === 0) {
       setTimeout(() => void loadMore(), 100);
-    } else if (!initialLoad && candidateBuffer.length < BATCH_SIZE) {
+    } else if (candidateBuffer.length < BATCH_SIZE) {
       void refillCandidates(PAGINATION_FETCH_SIZE).catch(() => {});
     }
   } catch (error) {
