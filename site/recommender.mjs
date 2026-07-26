@@ -1,4 +1,4 @@
-import { feedbackTerms } from "./feedback-registry.mjs?v=12";
+import { feedbackTerms } from "./feedback-registry.mjs?v=13";
 
 export const RECOMMENDER_DIMENSIONS = 256;
 const DIMENSIONS = RECOMMENDER_DIMENSIONS;

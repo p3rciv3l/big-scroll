@@ -1,6 +1,6 @@
-import { MultiFeedbackBprRecommender } from "./recommender.mjs?v=12";
-import { FeedbackStore } from "./feedback-store.mjs?v=12";
-import { REACTION_DEFINITIONS } from "./feedback-registry.mjs?v=12";
+import { MultiFeedbackBprRecommender } from "./recommender.mjs?v=13";
+import { FeedbackStore } from "./feedback-store.mjs?v=13";
+import { REACTION_DEFINITIONS } from "./feedback-registry.mjs?v=13";
 
 const API_ENDPOINT = "https://en.wikipedia.org/w/api.php";
 const BATCH_SIZE = 10;
@@ -30,6 +30,7 @@ let feedbackDirty = false;
 let candidateRequest = null;
 let viewFrame = 0;
 let activeView = null;
+let feedPageSize = Math.max(1, feed.clientHeight);
 const articleElements = new WeakMap();
 
 function flushFeedback() {
@@ -88,9 +89,11 @@ function refreshActiveView() {
     pauseViews();
     return;
   }
-  const bounds = feed.getBoundingClientRect();
-  const center = document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
-  const section = center?.closest("article.article");
+  const index = Math.max(0, Math.min(
+    feed.children.length - 1,
+    Math.round(feed.scrollTop / feedPageSize),
+  ));
+  const section = feed.children[index];
   if (section === activeView?.section) return;
   pauseViews();
   const article = articleElements.get(section);
@@ -357,6 +360,10 @@ feed.addEventListener("scroll", () => {
 }, { passive: true });
 feed.addEventListener("wheel", markScrollActivity, { passive: true });
 feed.addEventListener("touchmove", markScrollActivity, { passive: true });
+addEventListener("resize", () => {
+  feedPageSize = Math.max(1, feed.clientHeight);
+  scheduleActiveView();
+}, { passive: true });
 
 async function loadMore(attempt = 0) {
   if (loading) return;

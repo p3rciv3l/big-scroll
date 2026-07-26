@@ -1,4 +1,4 @@
-import { REACTION_IDS, reactionDefinition } from "./feedback-registry.mjs?v=12";
+import { REACTION_IDS, reactionDefinition } from "./feedback-registry.mjs?v=13";
 
 export const FEEDBACK_KEY = "big-scroll.feedback.v2";
 export const LEGACY_LIKES_KEY = "big-scroll.likes.v1";
