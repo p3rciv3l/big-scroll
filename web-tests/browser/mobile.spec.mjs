@@ -245,6 +245,37 @@ test("pagination waits for active scrolling to settle", async ({ page }) => {
   expect(wikipedia.calls).toBeGreaterThan(1);
 });
 
+test("pagination mounts without a long frame gap", async ({ page }) => {
+  await mockWikipedia(page, { latency: 150 });
+  await addConstrainedCpuLoad(page);
+  await page.goto("/");
+  await expect(page.locator(".article")).toHaveCount(10);
+  await page.waitForTimeout(1_000);
+  await page.evaluate(() => {
+    window.__paginationGaps = [];
+    window.__samplePagination = true;
+    let previous = performance.now();
+    function frame(now) {
+      window.__paginationGaps.push(now - previous);
+      previous = now;
+      if (window.__samplePagination) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  });
+  for (let index = 0; index < 12; index += 1) {
+    await page.locator("#feed").evaluate((feed) => { feed.scrollTop += 620; });
+    await page.waitForTimeout(85);
+  }
+  await page.waitForTimeout(300);
+  const maxGap = await page.evaluate(() => {
+    window.__samplePagination = false;
+    return Math.max(...window.__paginationGaps.slice(1));
+  });
+
+  console.log(`pagination max frame gap: ${Math.round(maxGap)}ms`);
+  expect(maxGap).toBeLessThan(50);
+});
+
 test("thumbnail-sparse pagination does not stall the next card", async ({ page }) => {
   const image = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='390' height='844'%3E%3Crect width='390' height='844' fill='%23263548'/%3E%3C/svg%3E";
   await mockWikipedia(page, {

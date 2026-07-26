@@ -322,6 +322,23 @@ async function waitForScrollSettle() {
   }
 }
 
+function nextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+async function appendArticles(articles, incremental) {
+  if (!incremental) {
+    const fragment = document.createDocumentFragment();
+    for (const article of articles) fragment.append(createArticle(article));
+    feed.append(fragment);
+    return;
+  }
+  for (const article of articles) {
+    await nextFrame();
+    feed.append(createArticle(article));
+  }
+}
+
 const observer = new IntersectionObserver((entries) => {
   if (entries.some((entry) => entry.isIntersecting)) scheduleLoadMore();
 }, { root: feed, rootMargin: "700% 0px" });
@@ -345,12 +362,7 @@ async function loadMore(attempt = 0) {
     const candidates = candidateBuffer.splice(0, BATCH_SIZE);
     flushFeedback();
     const ranked = recommender.rerank(candidates);
-    const fragment = document.createDocumentFragment();
-    for (const article of ranked) {
-      const element = createArticle(article);
-      fragment.append(element);
-    }
-    feed.append(fragment);
+    await appendArticles(ranked, !initialLoad);
     scheduleActiveView();
     if (loadTrigger) observer.unobserve(loadTrigger);
     loadTrigger = feed.lastElementChild;
