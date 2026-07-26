@@ -1,14 +1,12 @@
-import { MultiFeedbackBprRecommender } from "./recommender.mjs";
-import { EngagementStore } from "./engagement-store.mjs";
-import { loadLikes, saveLikes } from "./likes-store.mjs";
+import { MultiFeedbackBprRecommender } from "./recommender.mjs?v=12";
+import { FeedbackStore } from "./feedback-store.mjs?v=12";
+import { REACTION_DEFINITIONS } from "./feedback-registry.mjs?v=12";
 
 const API_ENDPOINT = "https://en.wikipedia.org/w/api.php";
 const BATCH_SIZE = 10;
 const PAGINATION_FETCH_SIZE = 30;
 const PAGINATION_SETTLE_MS = 200;
 const FEEDBACK_SETTLE_MS = 500;
-const HEART_OUTLINE_PATH = "M480 840 422 788Q321 697 255 631T150 512.5Q111 460 95.5 416T80 326Q80 232 143 169T300 106Q352 106 399 128T480 190Q514 150 561 128T660 106Q754 106 817 169T880 326Q880 372 864.5 416T810 512.5Q771 565 705 631T538 788L480 840ZM480 732Q576 646 638 584.5T736 477.5Q772 432 786 396.5T800 326Q800 266 760 226T660 186Q613 186 573 212.5T518 280H442Q427 239 387 212.5T300 186Q240 186 200 226T160 326Q160 361 174 396.5T224 477.5Q260 523 322 584.5T480 732Z";
-const HEART_FILL_PATH = "M480 840 422 788Q321 697 255 631T150 512.5Q111 460 95.5 416T80 326Q80 232 143 169T300 106Q352 106 399 128T480 190Q514 150 561 128T660 106Q754 106 817 169T880 326Q880 372 864.5 416T810 512.5Q771 565 705 631T538 788L480 840Z";
 const feed = document.querySelector("#feed");
 const status = document.querySelector("#status");
 const openLikes = document.querySelector("#open-likes");
@@ -18,11 +16,9 @@ const likedArticles = document.querySelector("#liked-articles");
 const likesCount = document.querySelector("#likes-count");
 const seen = new Set();
 const candidateBuffer = [];
-let likes = loadLikes();
-const engagementStore = new EngagementStore();
+const feedbackStore = new FeedbackStore();
 const recommender = new MultiFeedbackBprRecommender({
-  likedArticles: [...likes.values()],
-  engagements: engagementStore.values(),
+  feedback: feedbackStore.values(),
 });
 let loading = false;
 let requestSequence = 0;
@@ -40,26 +36,35 @@ function flushFeedback() {
   clearTimeout(feedbackTimer);
   feedbackTimer = 0;
   if (!feedbackDirty) return;
-  engagementStore.persist();
+  feedbackStore.persist();
   recommender.rebuild();
   feedbackDirty = false;
+}
+
+function flushFeedbackWhenIdle() {
+  const sinceScroll = performance.now() - lastScrollAt;
+  if (lastScrollAt && sinceScroll < FEEDBACK_SETTLE_MS) {
+    feedbackTimer = setTimeout(flushFeedbackWhenIdle, FEEDBACK_SETTLE_MS - sinceScroll);
+    return;
+  }
+  flushFeedback();
 }
 
 function scheduleFeedback() {
   feedbackDirty = true;
   clearTimeout(feedbackTimer);
-  feedbackTimer = setTimeout(flushFeedback, FEEDBACK_SETTLE_MS);
+  feedbackTimer = setTimeout(flushFeedbackWhenIdle, FEEDBACK_SETTLE_MS);
 }
 
 function recordClick(article) {
-  recommender.setEngagement(engagementStore.recordClick(article, { persist: false }), false);
+  recommender.setFeedback(feedbackStore.recordClick(article, { persist: false }), false);
   scheduleFeedback();
 }
 
 function recordView(article, elapsedMs) {
   if (elapsedMs <= 0) return;
-  const engagement = engagementStore.recordView(article, elapsedMs, { persist: false });
-  recommender.setEngagement(engagement, false);
+  const feedback = feedbackStore.recordView(article, elapsedMs, { persist: false });
+  recommender.setFeedback(feedback, false);
   scheduleFeedback();
 }
 
@@ -96,11 +101,8 @@ function scheduleActiveView() {
   if (!viewFrame) viewFrame = requestAnimationFrame(refreshActiveView);
 }
 
-function persistLikes() {
-  if (!saveLikes(likes)) {
-    setStatus("Likes could not be saved on this device.");
-  }
-  likesCount.textContent = String(likes.size);
+function updateLikesCount() {
+  likesCount.textContent = String(feedbackStore.likedArticles().length);
 }
 
 function setStatus(message, visible = true) {
@@ -122,10 +124,11 @@ function createActionIcon(path) {
   return svg;
 }
 
-function setHeartState(button, article, liked) {
-  button.replaceChildren(createActionIcon(liked ? HEART_FILL_PATH : HEART_OUTLINE_PATH));
-  button.setAttribute("aria-label", `${liked ? "Unlike" : "Like"} ${article.title}`);
-  button.setAttribute("aria-pressed", String(liked));
+function setActionState(button, article, reaction) {
+  const selected = feedbackStore.reaction(article) === reaction.id;
+  button.replaceChildren(createActionIcon(selected ? reaction.activePath : reaction.path));
+  button.setAttribute("aria-label", `${selected ? reaction.activeLabel : reaction.label} ${article.title}`);
+  button.setAttribute("aria-pressed", String(selected));
 }
 
 function prepareImage(image, source) {
@@ -173,6 +176,7 @@ async function fetchCandidates(limit = BATCH_SIZE) {
       article.pageid
       && article.image
       && article.extract.length > 15
+      && !feedbackStore.isSuppressed(article)
       && !seen.has(String(article.pageid))
     ));
 }
@@ -193,13 +197,13 @@ async function refillCandidates(limit) {
   return candidateRequest;
 }
 
-function createHeartButton(article) {
+function createActionButton(article, reaction) {
   const button = document.createElement("button");
-  button.className = "heart-button";
+  button.className = "article-action-button";
   button.type = "button";
-  const liked = likes.has(String(article.pageid));
-  setHeartState(button, article, liked);
-  button.addEventListener("click", () => toggleLike(article, button));
+  button.dataset.reaction = reaction.id;
+  setActionState(button, article, reaction);
+  button.addEventListener("click", () => toggleReaction(article, reaction.id));
   return button;
 }
 
@@ -231,7 +235,7 @@ function createArticle(article) {
 
   const actions = document.createElement("div");
   actions.className = "article-actions";
-  actions.append(createHeartButton(article));
+  actions.append(...REACTION_DEFINITIONS.map((reaction) => createActionButton(article, reaction)));
   const header = document.createElement("div");
   header.className = "article-header";
   header.append(heading, actions);
@@ -248,24 +252,25 @@ function createArticle(article) {
   return section;
 }
 
-function toggleLike(article, button) {
-  const key = String(article.pageid);
-  if (likes.has(key)) {
-    likes.delete(key);
-    recommender.unlike(article);
-    if (button) setHeartState(button, article, false);
-  } else {
-    likes.set(key, article);
-    recommender.like(article);
-    if (button) setHeartState(button, article, true);
+function toggleReaction(article, reactionId) {
+  const feedback = feedbackStore.toggleReaction(article, reactionId, { persist: false });
+  if (!feedbackStore.persist()) setStatus("Feedback could not be saved on this device.");
+  recommender.setFeedback(feedback);
+  const section = feed.querySelector(`[data-pageid="${article.pageid}"]`);
+  if (section) {
+    for (const reaction of REACTION_DEFINITIONS) {
+      const button = section.querySelector(`[data-reaction="${reaction.id}"]`);
+      if (button) setActionState(button, article, reaction);
+    }
   }
-  persistLikes();
+  updateLikesCount();
   renderLikes();
 }
 
 function renderLikes() {
+  const likes = feedbackStore.likedArticles();
   likedArticles.replaceChildren();
-  if (likes.size === 0) {
+  if (likes.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
     empty.textContent = "Tap a heart and the article will stay here—even after you close the tab.";
@@ -273,7 +278,7 @@ function renderLikes() {
     return;
   }
 
-  for (const article of [...likes.values()].reverse()) {
+  for (const article of [...likes].reverse()) {
     const card = document.createElement("article");
     card.className = "liked-card";
     const copy = document.createElement("div");
@@ -292,9 +297,7 @@ function renderLikes() {
     remove.type = "button";
     remove.textContent = "♥";
     remove.setAttribute("aria-label", `Unlike ${article.title}`);
-    remove.addEventListener("click", () => {
-      toggleLike(article, feed.querySelector(`[data-pageid="${article.pageid}"] .heart-button`));
-    });
+    remove.addEventListener("click", () => toggleReaction(article, "like"));
     if (article.image) {
       const image = document.createElement("img");
       image.className = "liked-card-image";
@@ -360,7 +363,6 @@ async function loadMore(attempt = 0) {
     }
     if (!initialLoad) await waitForScrollSettle();
     const candidates = candidateBuffer.splice(0, BATCH_SIZE);
-    flushFeedback();
     const ranked = recommender.rerank(candidates);
     await appendArticles(ranked, !initialLoad);
     scheduleActiveView();
@@ -432,7 +434,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-persistLikes();
+updateLikesCount();
 renderLikes();
 void loadMore();
 

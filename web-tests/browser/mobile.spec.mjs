@@ -30,7 +30,7 @@ async function sampleOneCardScroll(page) {
   });
 }
 
-test("iPhone feed keeps only Likes UI and persists a like", async ({ page }) => {
+test("Likes remains the only global UI and article reactions share one button system", async ({ page }) => {
   await mockWikipedia(page, { latency: 150 });
   await page.goto("/");
   await expect(page.locator(".article")).toHaveCount(10);
@@ -39,11 +39,26 @@ test("iPhone feed keeps only Likes UI and persists a like", async ({ page }) => 
   await expect(page.getByText("Language", { exact: true })).toHaveCount(0);
   await expect(page.locator('[aria-label*="logo" i], .logo')).toHaveCount(0);
 
-  const heart = page.locator(".heart-button").first();
-  await heart.click();
+  const firstCard = page.locator(".article").first();
+  const like = firstCard.locator('[data-reaction="like"]');
+  const dislike = firstCard.locator('[data-reaction="dislike"]');
+  const notInterested = firstCard.locator('[data-reaction="notInterested"]');
+  await expect(firstCard.locator(".article-action-button")).toHaveCount(3);
+  await expect(firstCard.locator(".article-action-button svg")).toHaveCount(3);
+
+  await like.click();
   await expect(page.locator("#likes-count")).toHaveText("1");
-  await expect(heart).toHaveCSS("background-color", "rgb(255, 45, 64)");
-  await expect(heart.locator("svg")).toHaveCount(1);
+  await expect(like).toHaveCSS("background-color", "rgb(255, 45, 64)");
+  await dislike.click();
+  await expect(page.locator("#likes-count")).toHaveText("0");
+  await expect(like).toHaveAttribute("aria-pressed", "false");
+  await expect(dislike).toHaveAttribute("aria-pressed", "true");
+  await notInterested.click();
+  await expect(dislike).toHaveAttribute("aria-pressed", "false");
+  await expect(notInterested).toHaveAttribute("aria-pressed", "true");
+  await notInterested.click();
+  await like.click();
+  await expect(page.locator("#likes-count")).toHaveText("1");
   await expect(page.locator(".share-button")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Read article" }).first()).toBeVisible();
   await page.reload();
@@ -67,37 +82,41 @@ test("visible time and Read clicks become local recommendation feedback", async 
   await page.locator("#feed").evaluate((feed) => feed.scrollTo({ top: feed.clientHeight, behavior: "instant" }));
 
   await expect.poll(() => page.evaluate((pageid) => {
-    const payload = JSON.parse(localStorage.getItem("big-scroll.engagement.v1"));
-    const item = payload?.engagements?.find(({ article }) => article.pageid === pageid);
-    return item && { clicked: item.clicked, hasView: item.viewMs > 100 };
+    const payload = JSON.parse(localStorage.getItem("big-scroll.feedback.v2"));
+    const item = payload?.feedback?.find(({ article }) => article.pageid === pageid);
+    return item && { clicked: item.signals.click, hasView: item.signals.dwellMs > 100 };
   }, firstPageId)).toEqual({ clicked: true, hasView: true });
 
   const first = await page.evaluate((pageid) => {
-    const payload = JSON.parse(localStorage.getItem("big-scroll.engagement.v1"));
-    return payload.engagements.find(({ article }) => article.pageid === pageid);
+    const payload = JSON.parse(localStorage.getItem("big-scroll.feedback.v2"));
+    return payload.feedback.find(({ article }) => article.pageid === pageid);
   }, firstPageId);
-  expect(first.viewMs).toBeGreaterThan(100);
+  expect(first.signals.dwellMs).toBeGreaterThan(100);
 });
 
-test("warm engagement history batches scroll-time persistence", async ({ page }) => {
+test("warm feedback history batches scroll-time persistence", async ({ page }) => {
   await mockWikipedia(page, { latency: 0 });
   await page.addInitScript(() => {
-    const engagements = Array.from({ length: 250 }, (_, index) => ({
+    const feedback = Array.from({ length: 250 }, (_, index) => ({
       article: {
         pageid: 10_000 + index,
         title: `History article ${index}`,
         extract: "Science, history, culture, technology, medicine, and art.",
         url: `https://en.wikipedia.org/?curid=${10_000 + index}`,
       },
-      clicked: index % 3 === 0,
-      viewMs: 5_000 + index,
+      signals: {
+        reaction: null,
+        click: index % 3 === 0,
+        dwellMs: 5_000 + index,
+      },
+      reactionAt: 0,
       updatedAt: index,
     }));
     const original = Storage.prototype.setItem;
-    original.call(localStorage, "big-scroll.engagement.v1", JSON.stringify({ version: 1, engagements }));
-    window.__engagementWrites = 0;
+    original.call(localStorage, "big-scroll.feedback.v2", JSON.stringify({ version: 2, feedback }));
+    window.__feedbackWrites = 0;
     Storage.prototype.setItem = function setItem(key, value) {
-      if (key === "big-scroll.engagement.v1") window.__engagementWrites += 1;
+      if (key === "big-scroll.feedback.v2") window.__feedbackWrites += 1;
       return original.call(this, key, value);
     };
   });
@@ -109,7 +128,7 @@ test("warm engagement history batches scroll-time persistence", async ({ page })
     await page.waitForTimeout(150);
   }
 
-  expect(await page.evaluate(() => window.__engagementWrites)).toBeLessThanOrEqual(1);
+  expect(await page.evaluate(() => window.__feedbackWrites)).toBeLessThanOrEqual(1);
 });
 
 test("persisted engagement changes the next ranking after reload", async ({ page }) => {
@@ -137,18 +156,55 @@ test("persisted engagement changes the next ranking after reload", async ({ page
   await expect(page.locator(".article h2").first()).toHaveText("Lunar spacecraft");
 });
 
+test("not interested survives reload and filters the exact article", async ({ page }) => {
+  const image = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='390' height='844'%3E%3Crect width='390' height='844' fill='%23263548'/%3E%3C/svg%3E";
+  await page.addInitScript(() => {
+    const article = {
+      pageid: 101,
+      title: "Hidden article",
+      extract: "An article the user explicitly asked not to see again.",
+      url: "https://en.wikipedia.org/?curid=101",
+      image: "hidden.jpg",
+    };
+    localStorage.setItem("big-scroll.feedback.v2", JSON.stringify({
+      version: 2,
+      feedback: [{
+        article,
+        signals: { reaction: "notInterested", click: false, dwellMs: 0 },
+        reactionAt: 1,
+        updatedAt: 1,
+      }],
+    }));
+  });
+  await page.route("https://en.wikipedia.org/w/api.php**", (route) => route.fulfill({ json: {
+    query: { pages: {
+      101: { pageid: 101, title: "Hidden article", extract: "An article the user explicitly asked not to see again.", fullurl: "https://en.wikipedia.org/?curid=101", thumbnail: { source: image } },
+      102: { pageid: 102, title: "Visible article", extract: "An article that remains eligible for recommendation.", fullurl: "https://en.wikipedia.org/?curid=102", thumbnail: { source: image } },
+    } },
+  } }));
+
+  await page.goto("/");
+  await expect(page.locator(".article")).toHaveCount(1);
+  await expect(page.locator(".article h2")).toHaveText("Visible article");
+});
+
 test("long constrained session keeps images present and frame gaps bounded", async ({ page }) => {
   const wikipedia = await mockWikipedia(page, { latency: 180 });
   await addConstrainedCpuLoad(page);
   await page.addInitScript(() => {
-    const articles = Array.from({ length: 30 }, (_, index) => ({
-      pageid: 10_000 + index,
-      title: `Liked science article ${index}`,
-      extract: "Science, medicine, technology, astronomy, and research.",
-      url: `https://en.wikipedia.org/?curid=${10_000 + index}`,
-      categories: [{ title: "Category:Science" }],
+    const feedback = Array.from({ length: 30 }, (_, index) => ({
+      article: {
+        pageid: 10_000 + index,
+        title: `Liked science article ${index}`,
+        extract: "Science, medicine, technology, astronomy, and research.",
+        url: `https://en.wikipedia.org/?curid=${10_000 + index}`,
+        categories: [{ title: "Category:Science" }],
+      },
+      signals: { reaction: "like", click: false, dwellMs: 0 },
+      reactionAt: index,
+      updatedAt: index,
     }));
-    localStorage.setItem("big-scroll.likes.v1", JSON.stringify({ version: 1, articles }));
+    localStorage.setItem("big-scroll.feedback.v2", JSON.stringify({ version: 2, feedback }));
   });
   await page.goto("/");
   await expect(page.locator(".article")).toHaveCount(10);
@@ -178,16 +234,16 @@ test("long constrained session keeps images present and frame gaps bounded", asy
   expect(timing.max).toBeLessThan(150);
 
   const viewBefore = await page.evaluate((pageid) => {
-    const payload = JSON.parse(localStorage.getItem("big-scroll.engagement.v1") || "{\"engagements\":[]}");
-    return payload.engagements.find(({ article }) => article.pageid === pageid)?.viewMs || 0;
+    const payload = JSON.parse(localStorage.getItem("big-scroll.feedback.v2") || "{\"feedback\":[]}");
+    return payload.feedback.find(({ article }) => article.pageid === pageid)?.signals.dwellMs || 0;
   }, firstPageId);
   await page.locator(".article").first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(250);
   await page.locator(".article").nth(1).scrollIntoViewIfNeeded();
   await page.waitForTimeout(700);
   const viewAfter = await page.evaluate((pageid) => {
-    const payload = JSON.parse(localStorage.getItem("big-scroll.engagement.v1"));
-    return payload.engagements.find(({ article }) => article.pageid === pageid)?.viewMs || 0;
+    const payload = JSON.parse(localStorage.getItem("big-scroll.feedback.v2"));
+    return payload.feedback.find(({ article }) => article.pageid === pageid)?.signals.dwellMs || 0;
   }, firstPageId);
   expect(viewAfter).toBeGreaterThan(viewBefore);
 });

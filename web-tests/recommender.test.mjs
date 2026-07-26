@@ -2,14 +2,32 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   articleVector,
-  dwellLevel,
   MultiFeedbackBprRecommender,
   RECOMMENDER_DIMENSIONS,
 } from "../site/recommender.mjs";
+import { feedbackTerms } from "../site/feedback-registry.mjs";
 
 const space = { pageid: 1, title: "Moon mission", extract: "A spacecraft, rocket, astronaut and lunar orbit.", categories: ["Spaceflight"] };
 const cooking = { pageid: 2, title: "French cuisine", extract: "Recipes, restaurants, bread, sauce and pastry.", categories: ["Cooking"] };
 const music = { pageid: 3, title: "String quartet", extract: "Violin, viola, cello, chamber music and composition.", categories: ["Music"] };
+const similarSpace = { ...space, pageid: 7, title: "Lunar spacecraft" };
+
+function feedback(article, changes = {}) {
+  return {
+    article,
+    signals: { reaction: null, click: false, dwellMs: 0 },
+    reactionAt: 0,
+    updatedAt: 1,
+    ...changes,
+    signals: { reaction: null, click: false, dwellMs: 0, ...changes.signals },
+  };
+}
+
+function trained(record, candidates = [cooking, similarSpace]) {
+  const model = new MultiFeedbackBprRecommender({ feedback: [record] });
+  model.rerank(candidates, () => 0.5);
+  return model;
+}
 
 test("article vectors are normalized and bounded", () => {
   const vector = articleVector(space);
@@ -18,125 +36,109 @@ test("article vectors are normalized and bounded", () => {
   assert.ok(Math.abs(magnitude - 1) < 0.0001);
 });
 
-test("a like raises similar content above unrelated content", () => {
-  const model = new MultiFeedbackBprRecommender({ likedArticles: [space] });
-  model.rerank([cooking, { ...space, pageid: 7 }], () => 0.5);
-  assert.ok(model.score({ ...space, title: "Lunar spacecraft" }) > model.score(cooking));
+test("registered relations remain independent instead of forming a hard-coded ladder", () => {
+  const terms = feedbackTerms(feedback(space, { signals: { reaction: "like", click: true, dwellMs: 45_000 } }), {
+    longDwellMs: 15_000,
+  });
+  assert.deepEqual(terms.map(({ id }) => id), ["like", "click", "dwell"]);
+  assert.ok(terms.find(({ id }) => id === "click").strength > terms.find(({ id }) => id === "like").strength);
+
+  const negativeTerms = feedbackTerms(feedback(space, {
+    signals: { reaction: "notInterested", click: true, dwellMs: 45_000 },
+  }));
+  assert.deepEqual(negativeTerms.map(({ id }) => id), ["notInterested"]);
+  assert.equal(negativeTerms[0].polarity, -1);
+
+  const dwell = (dwellMs) => feedbackTerms(
+    feedback(space, { signals: { dwellMs } }),
+    { longDwellMs: 15_000 },
+  )[0]?.strength || 0;
+  assert.ok(dwell(45_000) > dwell(5_000));
+  assert.ok(dwell(5_000) > dwell(500));
+  assert.equal(dwell(0), 0);
 });
 
-test("a lone click learns from real unobserved candidates", () => {
-  const model = new MultiFeedbackBprRecommender({ engagements: [{ article: space, clicked: true }] });
-  const ranked = model.rerank([cooking, { ...space, pageid: 7 }], () => 0.5);
-  assert.equal(ranked[0].title, space.title);
+test("like, click, and dwell all learn toward similar content", () => {
+  for (const record of [
+    feedback(space, { signals: { reaction: "like" } }),
+    feedback(space, { signals: { click: true } }),
+    feedback(space, { signals: { dwellMs: 45_000 } }),
+  ]) {
+    const model = trained(record);
+    assert.ok(model.score(similarSpace) > model.score(cooking));
+  }
 });
 
-test("MF-BPR assigns click, like, and contextual dwell to ordered feedback levels", () => {
-  const longSpace = { ...space, pageid: 3 };
-  const likedSpace = { ...space, pageid: 4 };
-  const clickedSpace = { ...space, pageid: 5 };
-  const combinedSpace = { ...space, pageid: 6 };
+test("combined click and like contributes more confidence than either signal alone", () => {
+  const combined = trained(feedback(space, { signals: { reaction: "like", click: true } }));
+  const clicked = trained(feedback(space, { signals: { click: true } }));
+  const liked = trained(feedback(space, { signals: { reaction: "like" } }));
+  const longView = trained(feedback(space, { signals: { dwellMs: 45_000 } }));
+  const margin = (model) => model.score(similarSpace) - model.score(cooking);
+
+  assert.ok(margin(combined) > margin(clicked));
+  assert.ok(margin(clicked) > margin(liked));
+  assert.ok(margin(liked) > margin(longView));
+});
+
+test("negative-only history learns away from similar candidates", () => {
+  for (const reaction of ["dislike", "notInterested"]) {
+    const model = trained(feedback(space, { signals: { reaction } }));
+    assert.ok(model.score(cooking) > model.score(similarSpace));
+  }
+});
+
+test("not interested applies a stronger avoidance objective than dislike", () => {
+  const disliked = trained(feedback(space, { signals: { reaction: "dislike" } }));
+  const dismissed = trained(feedback(space, { signals: { reaction: "notInterested" } }));
+  const avoidance = (model) => model.score(cooking) - model.score(similarSpace);
+  assert.ok(avoidance(dismissed) > avoidance(disliked));
+});
+
+test("an explicit negative overrides earlier click and dwell until cleared", () => {
+  const negative = trained(feedback(space, {
+    signals: { reaction: "dislike", click: true, dwellMs: 45_000 },
+  }));
+  assert.ok(negative.score(cooking) > negative.score(similarSpace));
+
+  const cleared = trained(feedback(space, {
+    signals: { reaction: null, click: true, dwellMs: 45_000 },
+  }));
+  assert.ok(cleared.score(similarSpace) > cleared.score(cooking));
+});
+
+test("positive and negative relations jointly separate their content", () => {
   const model = new MultiFeedbackBprRecommender({
-    likedArticles: [likedSpace, combinedSpace],
-    engagements: [
-      { article: longSpace, viewMs: 45_000 },
-      { article: clickedSpace, clicked: true },
-      { article: combinedSpace, clicked: true },
+    feedback: [
+      feedback(space, { signals: { reaction: "like", click: true } }),
+      feedback(cooking, { signals: { reaction: "notInterested" } }),
     ],
   });
-
-  const context = [5_000, 45_000];
-  assert.equal(model.evidenceLevel(combinedSpace, context), 1);
-  assert.equal(model.evidenceLevel(clickedSpace, context), 2);
-  assert.equal(model.evidenceLevel(likedSpace, context), 3);
-  assert.equal(model.evidenceLevel(longSpace, context), 4);
-  assert.equal(dwellLevel(5_000, context), 5);
-  assert.equal(dwellLevel(500, context), 6);
-  assert.equal(dwellLevel(0, context), 0);
-});
-
-test("MF-BPR learns a stronger channel preference over weaker viewed content", () => {
-  const model = new MultiFeedbackBprRecommender({
-    likedArticles: [space],
-    engagements: [
-      { article: space, clicked: true },
-      { article: cooking, viewMs: 5_000 },
-    ],
-  });
-
   assert.ok(model.score(space) > model.score(cooking));
 });
 
-test("every positive feedback level remains above unobserved content", () => {
-  const model = new MultiFeedbackBprRecommender({
-    likedArticles: [cooking],
-    engagements: [{ article: space, clicked: true }],
-  });
-  model.rerank([music], () => 0.5);
-
-  assert.ok(model.score(space) > model.score(cooking));
-  assert.ok(model.score(cooking) > model.score(music));
-});
-
-test("the learned profile reconstructs from persisted multi-channel feedback", () => {
-  const restored = new MultiFeedbackBprRecommender({
-    likedArticles: JSON.parse(JSON.stringify([space])),
-    engagements: [{ article: cooking, viewMs: 500 }],
-  });
-  assert.equal(restored.feedbackCount, 2);
-  assert.ok(restored.score(space) > restored.score(cooking));
-});
-
-test("like then unlike restores the empty profile", () => {
-  const model = new MultiFeedbackBprRecommender();
-  model.like(space);
-  model.unlike(space);
-  assert.equal(model.feedbackCount, 0);
-  assert.equal(model.score(space), 0);
-});
-
-test("unlike preserves a short-view level across reconstruction", () => {
-  const model = new MultiFeedbackBprRecommender({
-    likedArticles: [space],
-    engagements: [{ article: space, viewMs: 500 }],
-  });
-  model.unlike(space);
-  const restored = new MultiFeedbackBprRecommender({ engagements: [{ article: space, viewMs: 500 }] });
-  assert.equal(model.evidenceLevel(space), 6);
-  assert.equal(model.feedbackCount, restored.feedbackCount);
-});
-
-test("repeating the same like is idempotent", () => {
-  const model = new MultiFeedbackBprRecommender();
-  model.like(space);
-  const firstProfile = [...model.profile];
-  model.like(space);
-  assert.equal(model.feedbackCount, 1);
-  assert.deepEqual([...model.profile], firstProfile);
-});
-
-test("the MF-BPR profile reconstruction is independent of storage order", () => {
-  const left = new MultiFeedbackBprRecommender({ likedArticles: [space, cooking] });
-  const right = new MultiFeedbackBprRecommender({ likedArticles: [cooking, space] });
+test("the learned profile reconstructs independently of storage order", () => {
+  const records = [
+    feedback(space, { signals: { reaction: "like" } }),
+    feedback(cooking, { signals: { reaction: "dislike" } }),
+    feedback(music, { signals: { click: true } }),
+  ];
+  const left = new MultiFeedbackBprRecommender({ feedback: records });
+  const right = new MultiFeedbackBprRecommender({ feedback: [...records].reverse() });
   assert.deepEqual([...left.profile], [...right.profile]);
 });
 
 test("reranking is deterministic when exploration randomness is controlled", () => {
-  const model = new MultiFeedbackBprRecommender({
-    likedArticles: [space],
-    engagements: [{ article: cooking, viewMs: 500 }],
-  });
-  const ranked = model.rerank([cooking, space], () => 0.99);
-  assert.equal(ranked[0], space);
+  const model = trained(feedback(space, { signals: { reaction: "like" } }));
+  const ranked = model.rerank([cooking, similarSpace], () => 0.99);
+  assert.equal(ranked[0], similarSpace);
 });
 
 test("Gumbel sampling can explore an alternative without replacement", () => {
-  const model = new MultiFeedbackBprRecommender({
-    likedArticles: [space],
-    engagements: [{ article: cooking, viewMs: 500 }],
-  });
+  const model = trained(feedback(space, { signals: { reaction: "like" } }));
   const draws = [1 - Number.EPSILON, Number.EPSILON];
-  const ranked = model.rerank([cooking, space], () => draws.shift());
-  assert.deepEqual(ranked, [cooking, space]);
+  const ranked = model.rerank([cooking, similarSpace], () => draws.shift());
+  assert.deepEqual(ranked, [cooking, similarSpace]);
   assert.equal(new Set(ranked).size, ranked.length);
 });
 
