@@ -1,6 +1,6 @@
-import { MultiFeedbackBprRecommender } from "./recommender.mjs?v=13";
-import { FeedbackStore } from "./feedback-store.mjs?v=13";
-import { REACTION_DEFINITIONS } from "./feedback-registry.mjs?v=13";
+import { MultiFeedbackBprRecommender } from "./recommender.mjs?v=14";
+import { FeedbackStore } from "./feedback-store.mjs?v=14";
+import { REACTION_DEFINITIONS } from "./feedback-registry.mjs?v=14";
 
 const API_ENDPOINT = "https://en.wikipedia.org/w/api.php";
 const BATCH_SIZE = 10;

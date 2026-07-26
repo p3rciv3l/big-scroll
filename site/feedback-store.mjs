@@ -1,4 +1,4 @@
-import { REACTION_IDS, reactionDefinition } from "./feedback-registry.mjs?v=13";
+import { REACTION_IDS, reactionDefinition } from "./feedback-registry.mjs?v=14";
 
 export const FEEDBACK_KEY = "big-scroll.feedback.v2";
 export const LEGACY_LIKES_KEY = "big-scroll.likes.v1";
@@ -197,6 +197,7 @@ export class FeedbackStore {
   }
 
   trim() {
+    if (this.records.size <= this.implicitLimit) return;
     const implicit = this.values().filter(({ signals }) => !signals.reaction);
     const excess = implicit.length - this.implicitLimit;
     if (excess <= 0) return;
