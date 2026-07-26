@@ -386,7 +386,12 @@ async function loadMore(attempt = 0) {
     if (ranked.length === 0) {
       setTimeout(() => void loadMore(), 100);
     } else if (candidateBuffer.length < BATCH_SIZE) {
-      void refillCandidates(PAGINATION_FETCH_SIZE).catch(() => {});
+      const refill = refillCandidates(PAGINATION_FETCH_SIZE);
+      if (initialLoad) {
+        void refill.then(() => loadMore()).catch(() => {});
+      } else {
+        void refill.catch(() => {});
+      }
     }
   } catch (error) {
     const delay = Math.min(8000, 500 * (2 ** attempt));

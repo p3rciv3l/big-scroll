@@ -33,7 +33,7 @@ async function sampleOneCardScroll(page) {
 test("Likes remains the only global UI and article reactions share one button system", async ({ page }) => {
   await mockWikipedia(page, { latency: 150 });
   await page.goto("/");
-  await expect(page.locator(".article")).toHaveCount(10);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThanOrEqual(10);
 
   await expect(page.getByText("About", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Language", { exact: true })).toHaveCount(0);
@@ -71,7 +71,7 @@ test("Likes remains the only global UI and article reactions share one button sy
 test("visible time and Read clicks become local recommendation feedback", async ({ page }) => {
   await mockWikipedia(page, { latency: 0 });
   await page.goto("/");
-  await expect(page.locator(".article")).toHaveCount(10);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThanOrEqual(10);
 
   const firstPageId = Number(await page.locator(".article").first().getAttribute("data-pageid"));
   await page.waitForTimeout(300);
@@ -121,7 +121,7 @@ test("warm feedback history batches scroll-time persistence", async ({ page }) =
     };
   });
   await page.goto("/");
-  await expect(page.locator(".article")).toHaveCount(10);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThanOrEqual(10);
 
   for (let index = 1; index < 5; index += 1) {
     await page.locator(".article").nth(index).scrollIntoViewIfNeeded();
@@ -207,7 +207,7 @@ test("long constrained session keeps images present and frame gaps bounded", asy
     localStorage.setItem("big-scroll.feedback.v2", JSON.stringify({ version: 2, feedback }));
   });
   await page.goto("/");
-  await expect(page.locator(".article")).toHaveCount(10);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThanOrEqual(10);
   await expect(page.locator("#likes-count")).toHaveText("30");
   const firstPageId = Number(await page.locator(".article").first().getAttribute("data-pageid"));
 
@@ -257,7 +257,7 @@ test("feed excludes articles without usable images", async ({ page }) => {
   });
 
   await page.goto("/");
-  await expect(page.locator(".article")).toHaveCount(5);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThanOrEqual(5);
 
   const cards = page.locator(".article");
   await expect(cards.locator(".article-image")).toHaveCount(await cards.count());
@@ -265,12 +265,12 @@ test("feed excludes articles without usable images", async ({ page }) => {
   expect(wikipedia.calls).toBe(2);
 });
 
-test("startup renders one small batch before background prefetch", async ({ page }) => {
+test("startup renders promptly and fills an offscreen runway", async ({ page }) => {
   const wikipedia = await mockWikipedia(page, { latency: 0 });
 
   await page.goto("/");
-  await expect(page.locator(".article")).toHaveCount(10);
-  await page.waitForTimeout(100);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThanOrEqual(10);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThanOrEqual(20);
 
   expect(wikipedia.calls).toBe(2);
   const request = new URL(wikipedia.urls[0]);
@@ -282,7 +282,8 @@ test("pagination waits for active scrolling to settle", async ({ page }) => {
   const wikipedia = await mockWikipedia(page, { latency: 0 });
 
   await page.goto("/");
-  await expect(page.locator(".article")).toHaveCount(10);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThanOrEqual(20);
+  const bufferedCount = await page.locator(".article").count();
   await page.locator("#feed").evaluate(async (feed) => {
     const started = performance.now();
     await new Promise((resolve) => {
@@ -296,8 +297,8 @@ test("pagination waits for active scrolling to settle", async ({ page }) => {
     });
   });
 
-  await expect(page.locator(".article")).toHaveCount(10);
-  await expect.poll(() => page.locator(".article").count()).toBeGreaterThan(10);
+  expect(await page.locator(".article").count()).toBe(bufferedCount);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThan(bufferedCount);
   expect(wikipedia.calls).toBeGreaterThan(1);
 });
 
@@ -305,8 +306,10 @@ test("pagination mounts without a long frame gap", async ({ page }) => {
   await mockWikipedia(page, { latency: 150 });
   await addConstrainedCpuLoad(page);
   await page.goto("/");
-  await expect(page.locator(".article")).toHaveCount(10);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThanOrEqual(10);
   await page.waitForTimeout(1_000);
+  const bufferedCount = await page.locator(".article").count();
+  expect(bufferedCount).toBeGreaterThan(10);
   await page.evaluate(() => {
     window.__paginationGaps = [];
     window.__samplePagination = true;
@@ -326,15 +329,18 @@ test("pagination mounts without a long frame gap", async ({ page }) => {
     await page.waitForTimeout(85);
   }
   await page.waitForTimeout(300);
-  await expect(page.locator(".article")).toHaveCount(10);
-  const maxGap = await page.evaluate(() => {
+  const { cardCount, maxGap } = await page.evaluate(() => {
     window.__samplePagination = false;
-    return Math.max(...window.__paginationGaps.slice(1));
+    return {
+      cardCount: document.querySelectorAll(".article").length,
+      maxGap: Math.max(...window.__paginationGaps.slice(1)),
+    };
   });
 
   console.log(`pagination max frame gap: ${Math.round(maxGap)}ms`);
+  expect(cardCount).toBe(bufferedCount);
   expect(maxGap).toBeLessThan(50);
-  await expect.poll(() => page.locator(".article").count()).toBeGreaterThan(10);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThan(bufferedCount);
 });
 
 test("thumbnail-sparse pagination does not stall the next card", async ({ page }) => {
@@ -347,7 +353,7 @@ test("thumbnail-sparse pagination does not stall the next card", async ({ page }
     },
   });
   await page.goto("/");
-  await expect(page.locator(".article")).toHaveCount(10);
+  await expect.poll(() => page.locator(".article").count()).toBeGreaterThanOrEqual(10);
 
   const started = Date.now();
   await page.locator("#feed").evaluate((feed) => {

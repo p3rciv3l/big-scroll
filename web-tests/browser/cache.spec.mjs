@@ -7,7 +7,7 @@ test("service worker cache remains readable offline", async ({ context, page }) 
 
   const cached = await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
-    const assets = ["./", "./styles.css?v=12", "./app.js?v=12", "./feedback-store.mjs?v=12", "./feedback-registry.mjs?v=12", "./recommender.mjs?v=12"];
+    const assets = ["./", "./styles.css?v=13", "./app.js?v=13", "./feedback-store.mjs?v=13", "./feedback-registry.mjs?v=13", "./recommender.mjs?v=13"];
     return Promise.all(
       assets.map(async (asset) => Boolean(await caches.match(new URL(asset, location.href)))),
     );
@@ -19,7 +19,7 @@ test("service worker cache remains readable offline", async ({ context, page }) 
 
   await context.setOffline(true);
   const offlineResponses = await page.evaluate(async () => {
-    const assets = ["./", "./styles.css?v=12", "./app.js?v=12", "./feedback-store.mjs?v=12", "./feedback-registry.mjs?v=12", "./recommender.mjs?v=12"];
+    const assets = ["./", "./styles.css?v=13", "./app.js?v=13", "./feedback-store.mjs?v=13", "./feedback-registry.mjs?v=13", "./recommender.mjs?v=13"];
     return Promise.all(assets.map(async (asset) => {
       const response = await caches.match(new URL(asset, location.href));
       return { ok: response.ok, bytes: (await response.text()).length };
@@ -32,7 +32,7 @@ test("service worker cache remains readable offline", async ({ context, page }) 
 test("the full module graph is cache-versioned for atomic upgrades", async ({ page }) => {
   await page.goto("/");
   const imports = await page.evaluate(async () => {
-    const files = ["./app.js?v=12", "./feedback-store.mjs?v=12", "./recommender.mjs?v=12"];
+    const files = ["./app.js?v=13", "./feedback-store.mjs?v=13", "./recommender.mjs?v=13"];
     return Promise.all(files.map(async (file) => ({
       file,
       source: await (await fetch(file)).text(),
