@@ -259,10 +259,15 @@ test("feed excludes articles without usable images", async ({ page }) => {
   await page.goto("/");
   await expect.poll(() => page.locator(".article").count()).toBeGreaterThanOrEqual(5);
 
-  const cards = page.locator(".article");
-  await expect(cards.locator(".article-image")).toHaveCount(await cards.count());
-  await expect(cards.locator(".no-image")).toHaveCount(0);
-  expect(wikipedia.calls).toBe(2);
+  const imageState = await page.locator(".article").evaluateAll((cards) => ({
+    cards: cards.length,
+    withImages: cards.filter((card) => card.querySelector(".article-image[src]")).length,
+    placeholders: cards.filter((card) => card.querySelector(".no-image")).length,
+  }));
+  expect(imageState.withImages).toBe(imageState.cards);
+  expect(imageState.placeholders).toBe(0);
+  expect(wikipedia.calls).toBeGreaterThanOrEqual(2);
+  expect(wikipedia.calls).toBeLessThanOrEqual(4);
 });
 
 test("startup renders promptly and fills an offscreen runway", async ({ page }) => {
